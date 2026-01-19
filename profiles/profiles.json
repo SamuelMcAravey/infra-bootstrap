@@ -1,0 +1,34 @@
+{
+  "profiles": [
+    {
+      "name": "edgeapp",
+      "description": "Docker host + ZeroTier + NAT + edge network + app stack with cloudflared.",
+      "required_vars": [
+        { "name": "APP_IMAGE", "secret": false },
+        { "name": "ZEROTIER_NETWORK_ID", "secret": false },
+        { "name": "CLOUDFLARE_TUNNEL_TOKEN", "secret": true }
+      ],
+      "optional_vars": [
+        { "name": "COMPOSE_PROJECT_DIR", "secret": false, "default": "/srv/app" },
+        { "name": "EDGE_NETWORK_NAME", "secret": false, "default": "edge" }
+      ]
+    },
+    {
+      "name": "app-only",
+      "description": "Edge network + app stack with cloudflared (no Docker install).",
+      "required_vars": [
+        { "name": "APP_IMAGE", "secret": false }
+      ],
+      "optional_vars": [
+        { "name": "COMPOSE_PROJECT_DIR", "secret": false, "default": "/srv/app" },
+        { "name": "EDGE_NETWORK_NAME", "secret": false, "default": "edge" }
+      ]
+    },
+    {
+      "name": "docker-host",
+      "description": "Install Docker host prerequisites only.",
+      "required_vars": [],
+      "optional_vars": []
+    }
+  ]
+}

@@ -25,6 +25,12 @@ Decide where the snippet files live on disk (example):
 SNIPPETS_DIR=/mnt/pve/synology.lan/snippets
 ```
 
+Snippets are **flat** in this directory (no subfolders):
+
+```
+/mnt/pve/synology.lan/snippets/ci-edgeapp-1201.yaml
+```
+
 ## 2) One-Time: Prepare a Debian Cloud-Init Template (High Level)
 
 - Install Debian on a VM (from ISO).
@@ -37,50 +43,38 @@ sudo systemctl enable --now qemu-guest-agent
 ```
 
 - In Proxmox, confirm the VM has a Cloud-Init drive option available, then convert the VM to a template.
+- Record the template VMID (used as `TemplateId`).
 
-## 3) Sync Snippet Profiles From Git
+## 3) Day 2: Create VMs (Single Entrypoint)
 
-On the Proxmox host, clone this repo somewhere convenient:
-
-```bash
-git clone https://github.com/SamuelMcAravey/infra-bootstrap.git /opt/infra-bootstrap
-cd /opt/infra-bootstrap
-```
-
-Ensure the snippets subfolders exist:
+Option A: run the wrapper (no local clone required):
 
 ```bash
-bash ./scripts/proxmox-ensure-storage.sh --snippets-dir "$SNIPPETS_DIR"
+sudo bash https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap/main/scripts/get-new-infravm.sh \
+  -Profile edgeapp -VmId 1201 -Name edgeapp-01 -TemplateId 9000
 ```
 
-Sync cloud-init profile YAMLs into the snippets storage (flat `ci-*.yaml` in the snippets root):
+Option B: run PowerShell directly (if you already have the repo):
 
 ```bash
-REPO_RAW_BASE=https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap
-bash ./scripts/proxmox-sync-snippets.sh --snippets-dir "$SNIPPETS_DIR" --ref main
+sudo pwsh ./scripts/New-InfraVm.ps1 -Profile edgeapp -VmId 1201 -Name edgeapp-01 -TemplateId 9000
 ```
 
-List what’s installed:
+The script will prompt for missing inputs (secrets are hidden):
+
+```
+APP_IMAGE: ghcr.io/example/app:latest
+ZEROTIER_NETWORK_ID: ztabcdef12345678
+CLOUDFLARE_TUNNEL_TOKEN (secret): ********
+```
+
+Generated snippets are written to:
 
 ```bash
-bash ./scripts/proxmox-list-snippets.sh --snippets-dir "$SNIPPETS_DIR"
+/mnt/pve/synology.lan/snippets/ci-<profile>-<vmid>.yaml
 ```
 
-## 4) Create a VM (edgeapp Example)
-
-This clones your template and attaches the profile snippet as `cicustom`:
-
-```bash
-bash ./scripts/create-edgeapp.sh \
-  --vmid <vmid> \
-  --name <name> \
-  --template-id <template-vmid> \
-  --snippets-storage-id synology.lan \
-  --storage local-lvm \
-  --bridge vmbr0
-```
-
-## 5) Logs to Check on the VM
+## 4) Verify On The Guest
 
 Cloud-init status:
 
@@ -105,7 +99,7 @@ Ansible output:
 - First boot: it is typically in `/var/log/cloud-init-output.log`.
 - Manual reruns: it prints to your terminal when you run the script.
 
-## 6) Rerun Provisioning
+## 5) Rerun Provisioning
 
 Edit variables (profile, repo URL, app image, tokens, etc.):
 

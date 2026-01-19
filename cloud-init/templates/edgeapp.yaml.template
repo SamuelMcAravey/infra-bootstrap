@@ -1,0 +1,41 @@
+#cloud-config
+# Proxmox/NoCloud cloud-init user-data for this repo.
+# Intended for Proxmox snippets (`qm set ... --cicustom "user=<storage-id>:snippets/<file>"`) or NoCloud seed ISO.
+# Proxmox is expected to manage networking/hostname/SSH keys; this user-data only bootstraps provisioning.
+# Profile: {{PROFILE}}
+
+output:
+  all: '| tee -a /var/log/cloud-init-output.log'
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - python3
+  - python3-apt
+  - git
+  - ca-certificates
+  - curl
+
+write_files:
+  - path: /etc/bootstrap.env
+    owner: root:root
+    permissions: '0644'
+    content: |
+      # Bootstrap configuration consumed by scripts/bootstrap.sh and Ansible.
+      PROFILE={{PROFILE}}
+      # Default REPO_URL: https://github.com/SamuelMcAravey/infra-bootstrap
+      REPO_URL={{REPO_URL}}
+
+      # Used by app profiles (app_compose role).
+      COMPOSE_PROJECT_DIR={{COMPOSE_PROJECT_DIR}}
+
+      # Docker edge network used by the cloudflared/app stack.
+      EDGE_NETWORK_NAME={{EDGE_NETWORK_NAME}}
+
+      # Optional/required depending on the selected Ansible profile.
+      ZEROTIER_NETWORK_ID={{ZEROTIER_NETWORK_ID}}
+      APP_IMAGE={{APP_IMAGE}}
+
+runcmd:
+  - [ bash, -lc, 'set -euo pipefail; source /etc/bootstrap.env; if [ -n "{{CLOUDFLARE_TUNNEL_TOKEN}}" ]; then umask 077; printf "CLOUDFLARE_TUNNEL_TOKEN=%s\n" "{{CLOUDFLARE_TUNNEL_TOKEN}}" > /etc/bootstrap.secrets.env; chown root:root /etc/bootstrap.secrets.env; chmod 600 /etc/bootstrap.secrets.env; fi; if [ -f /etc/bootstrap.secrets.env ]; then source /etc/bootstrap.secrets.env; fi; : "${REPO_URL:?REPO_URL must be set}"; mkdir -p /opt/bootstrap; if [ ! -d /opt/bootstrap/repo/.git ]; then git clone "${REPO_URL}" /opt/bootstrap/repo; else git -C /opt/bootstrap/repo pull --ff-only; fi; /opt/bootstrap/repo/scripts/bootstrap.sh' ]

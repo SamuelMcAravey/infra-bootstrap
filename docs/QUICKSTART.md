@@ -1,27 +1,39 @@
 # Quickstart (Proxmox Host Admin)
 
 Assumes:
-- A cloud-init enabled template VM already exists.
-- A Proxmox storage ID for snippets already exists and has snippet files synced to it.
+- Snippets storage exists and is mounted at `/mnt/pve/synology.lan/snippets` (flat).
+- A Debian template VM exists with cloud-init enabled (`TemplateId`).
 
-## 1) Sync Cloud-Init Snippets (main)
+## 1) Create An `edgeapp` VM (single entrypoint)
 
-```bash
-sudo mkdir /opt/infra-bootstrap
-cd /opt/infra-bootstrap
-REPO_RAW_BASE=https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap \
-bash ./scripts/proxmox-sync-snippets.sh --snippets-dir /mnt/pve/synology.lan/snippets --ref main
-```
-
-## 2) Create An `edgeapp` VM
+Option A: run the wrapper (no local clone required):
 
 ```bash
-cd /opt/infra-bootstrap
-TEMPLATE_ID=<template-vmid> SNIPPETS_STORAGE_ID=synology.lan \
-bash ./scripts/create-edgeapp.sh <vmid> <name>
+sudo bash https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap/main/scripts/get-new-infravm.sh \
+  -Profile edgeapp -VmId 1201 -Name edgeapp-01 -TemplateId 9000
 ```
 
-## 3) Wait For First Boot, Then Check Logs (on the VM)
+Option B: run PowerShell directly (if you already have the repo):
+
+```bash
+sudo pwsh ./scripts/New-InfraVm.ps1 -Profile edgeapp -VmId 1201 -Name edgeapp-01 -TemplateId 9000
+```
+
+The script will prompt for missing inputs (secrets are hidden):
+
+```
+APP_IMAGE: ghcr.io/example/app:latest
+ZEROTIER_NETWORK_ID: ztabcdef12345678
+CLOUDFLARE_TUNNEL_TOKEN (secret): ********
+```
+
+Generated snippets are written to:
+
+```
+/mnt/pve/synology.lan/snippets/ci-<profile>-<vmid>.yaml
+```
+
+## 2) Verify On The Guest
 
 ```bash
 cloud-init status --long
@@ -33,4 +45,3 @@ For details/troubleshooting:
 - `docs/WALKTHROUGH_PROXMOX.md`
 - `docs/PROXMOX_SNIPPETS.md`
 - `docs/PROXMOX_VM_CREATE.md`
-

@@ -39,7 +39,7 @@
             (bootstrap_env_raws.results | default([]))
             | map(attribute='content')
             | map('b64decode')
-            | map('splitlines')
+            | map('regex_findall', '^[^\r\n]+', multiline=True)
             | sum(start=[])
             | reject('match', '^\\s*#')
             | reject('match', '^\\s*$')

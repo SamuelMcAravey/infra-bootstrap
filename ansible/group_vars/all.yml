@@ -1,6 +1,6 @@
 ---
 profile: edgeapp
-repo_url: ""
+repo_url: "https://github.com/SamuelMcAravey/infra-bootstrap.git"
 zerotier_network_id: ""
 cloudflare_tunnel_token: ""
 app_image: ""

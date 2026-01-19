@@ -20,7 +20,8 @@ Provisioning uses two files on the VM:
 
 If required variables are missing and you run `scripts/bootstrap.sh` interactively, it will prompt and write values
 to the appropriate file before Ansible runs. For unattended provisioning, inject `/etc/bootstrap.secrets.env`
-ahead of time (for example via a Proxmox snippet).
+ahead of time (for example via a Proxmox snippet). Cloud-init first boot is non-interactive, so prompts will not
+appear during the initial run.
 
 ## Profiles vs Roles
 

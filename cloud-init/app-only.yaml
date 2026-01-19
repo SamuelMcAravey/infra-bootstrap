@@ -25,7 +25,7 @@ write_files:
       # Bootstrap configuration consumed by scripts/bootstrap.sh and Ansible.
       PROFILE=app-only
       # REPO_URL=https://example.com/your-org/infra-bootstrap.git
-      REPO_URL=
+      REPO_URL=https://github.com/SamuelMcAravey/infra-bootstrap.git
 
       # Used by app profiles (app_compose role).
       COMPOSE_PROJECT_DIR=/srv/app

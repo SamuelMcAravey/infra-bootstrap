@@ -89,7 +89,7 @@ bash ./scripts/proxmox-list-snippets.sh --snippets-dir "$SNIPPETS_DIR"
 Once the YAML is present in the snippets directory, attach it to a VM (example):
 
 ```bash
-qm set <vmid> --cicustom "user=synology.lan:snippets/ci-edgeapp.yaml"
+qm set <vmid> --cicustom "vendor=synology.lan:snippets/ci-edgeapp.yaml"
 ```
 
 The snippet filename should match what was written by the sync script.

@@ -29,7 +29,7 @@ Optional:
   --snippets-path <name>      Snippet filename in snippets root (default: ci-<profile>.yaml)
 
 Notes:
-  - Sets cicustom to: user=<snippets-storage-id>:snippets/ci-<profile>.yaml
+  - Sets cicustom to: vendor=<snippets-storage-id>:snippets/ci-<profile>.yaml
   - If a version file exists at: <snippets-storage-id>:snippets/ci-<profile>.version,
     the VM description is updated to include the profile + ref.
   - If the cloned VM already has a cloud-init drive attached, the script will keep it. Otherwise it will add one.
@@ -193,7 +193,7 @@ main() {
   fi
 
   echo "Attaching profile snippet (profile=$profile)"
-  qm set "$vmid" --cicustom "user=${ci_volume_id}"
+  qm set "$vmid" --cicustom "vendor=${ci_volume_id}"
 
   if [[ -n "$disk_gb" ]]; then
     local disk_key=""
@@ -237,7 +237,7 @@ Next steps:
   - /var/log/cloud-init.log
   - /var/log/cloud-init-output.log
 - If provisioning did not run, confirm:
-  - cicustom is set to: user=${ci_volume_id}
+  - cicustom is set to: vendor=${ci_volume_id}
   - the snippet file exists at: ${ci_abs_path}
 EOF
 }

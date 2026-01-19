@@ -45,9 +45,9 @@ main() {
   ensure_ansible
 
   log "Prompting for missing variables (if interactive)."
-  /opt/bootstrap/repo/scripts/prompt-missing-vars.sh
+  bash /opt/bootstrap/repo/scripts/prompt-missing-vars.sh
 
-  /opt/bootstrap/repo/scripts/apply-ansible.sh
+  bash /opt/bootstrap/repo/scripts/apply-ansible.sh
 
   mkdir -p "$STATE_DIR"
   echo "$profile" > "$STATE_DIR/last_profile"

@@ -4,20 +4,20 @@
 
 Store cloud-init user-data snippets on the Proxmox host at:
 
-`/var/lib/vz/snippets`
+- Local storage: `/var/lib/vz/snippets/`
+- Shared storage: `/mnt/pve/<storage-id>/snippets/` (flat files; recommended)
 
-## Attach User-Data
+## Attach Profile Snippet
 
-Pick the cloud-init user-data file matching your desired profile (for example `cloud-init/edgeapp.yaml`) and set
-`REPO_URL` (plus any required vars like `APP_IMAGE` or `CLOUDFLARE_TUNNEL_TOKEN`) before uploading it.
+This repo syncs profile snippets to Proxmox as flat files named `ci-<profile>.yaml` (see `docs/PROXMOX_SNIPPETS.md`).
 
-Upload the user-data file from `cloud-init/` into the snippets folder, then attach it to the VM:
+Attach the snippet as **vendor-data** so Proxmox can keep managing user/SSH keys via its generated user-data:
 
 ```bash
-qm set <vmid> --cicustom "user=local:snippets/<file>"
+qm set <vmid> --cicustom "vendor=<storage-id>:snippets/ci-edgeapp.yaml"
 ```
 
-This tells Proxmox to use your custom `user-data` for cloud-init.
+Cloud-init inside the VM must be installed/enabled for any of this to run.
 
 ## Safe Iteration
 

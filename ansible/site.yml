@@ -1,0 +1,151 @@
+---
+- name: Local provisioning
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    bootstrap_env_paths:
+      - /etc/bootstrap.env
+      - /etc/bootstrap.secrets.env
+    profile_default: edgeapp
+    roles_base_dir: "{{ playbook_dir }}/roles"
+    required_vars_by_profile:
+      edgeapp:
+        - ZEROTIER_NETWORK_ID
+        - APP_IMAGE
+        - CLOUDFLARE_TUNNEL_TOKEN
+      app-only:
+        - APP_IMAGE
+      docker-host: []
+  tasks:
+    - name: Check bootstrap env files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ bootstrap_env_paths }}"
+      register: bootstrap_env_stats
+
+    - name: Read bootstrap env files
+      ansible.builtin.slurp:
+        src: "{{ item.stat.path }}"
+      loop: "{{ bootstrap_env_stats.results | selectattr('stat.exists', 'equalto', true) | list }}"
+      loop_control:
+        label: "{{ item.stat.path }}"
+      register: bootstrap_env_raws
+
+    - name: Parse bootstrap env files
+      ansible.builtin.set_fact:
+        bootstrap_env_lines: >-
+          {{
+            (bootstrap_env_raws.results | default([]))
+            | map(attribute='content')
+            | map('b64decode')
+            | map('splitlines')
+            | sum(start=[])
+            | reject('match', '^\\s*#')
+            | reject('match', '^\\s*$')
+            | list
+          }}
+        bootstrap_env_kv: >-
+          {{
+            bootstrap_env_lines
+            | map(
+                'regex_search',
+                '^\\s*(?:export\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*)\\s*$',
+                '\\1\\x1f\\2'
+              )
+            | reject('equalto', None)
+            | list
+          }}
+        bootstrap_env_dict: >-
+          {{
+            dict(bootstrap_env_kv | map('split', '\x1f', 2) | map('list'))
+          }}
+
+    - name: Determine active profile
+      ansible.builtin.set_fact:
+        profile: >-
+          {{
+            (bootstrap_env_dict.PROFILE
+            | default(lookup('env', 'PROFILE') | default(profile_default, true), true)
+            | trim)
+          }}
+
+    - name: Fail when PROFILE is missing and no default exists
+      ansible.builtin.fail:
+        msg: >-
+          PROFILE is not set and no default profile is configured.
+          Set PROFILE in /etc/bootstrap.env (PROFILE=<name>) or set the PROFILE environment variable.
+      when: profile | length == 0
+
+    - name: Check profile file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/profiles/{{ profile }}.yml"
+      register: profile_file_stat
+
+    - name: Fail when profile file is missing
+      ansible.builtin.fail:
+        msg: >-
+          Unknown profile '{{ profile }}'.
+          Expected profile file: {{ playbook_dir }}/profiles/{{ profile }}.yml
+      when: not profile_file_stat.stat.exists
+
+    - name: Load profile roles
+      ansible.builtin.include_tasks:
+        file: "profiles/{{ profile }}.yml"
+
+    - name: Ensure profile_roles is a list
+      ansible.builtin.assert:
+        that:
+          - profile_roles is defined
+          - profile_roles is sequence
+          - profile_roles is not string
+        fail_msg: >-
+          Profile '{{ profile }}' did not define profile_roles.
+          Ensure {{ playbook_dir }}/profiles/{{ profile }}.yml sets profile_roles as a list of role names.
+
+    - name: Check referenced roles exist
+      ansible.builtin.stat:
+        path: "{{ roles_base_dir }}/{{ item }}"
+      loop: "{{ profile_roles }}"
+      register: role_stats
+
+    - name: Fail when a referenced role is missing
+      ansible.builtin.fail:
+        msg: >-
+          Profile '{{ profile }}' references missing role(s): {{ missing_roles | join(', ') }}.
+          Expected role directories under: {{ roles_base_dir }}
+      vars:
+        missing_roles: >-
+          {{
+            role_stats.results
+            | selectattr('stat.isdir', 'equalto', false)
+            | map(attribute='item')
+            | list
+          }}
+      when: >-
+        (role_stats.results | selectattr('stat.isdir', 'equalto', false) | list | length) > 0
+
+    - name: Provisioning header
+      ansible.builtin.debug:
+        msg:
+          - "PROFILE: {{ profile }}"
+          - "Roles: {{ (profile_roles | join(', ')) if (profile_roles | length > 0) else '(none)' }}"
+          - "bootstrap env files: {{ bootstrap_env_paths | join(', ') }}"
+          - "REPO_URL: {{ (bootstrap_env_dict.REPO_URL | default('') | length > 0) | ternary('set', 'unset') }}"
+          - "COMPOSE_PROJECT_DIR: {{ bootstrap_env_dict.COMPOSE_PROJECT_DIR | default('/srv/app', true) }}"
+          - "EDGE_NETWORK_NAME: {{ bootstrap_env_dict.EDGE_NETWORK_NAME | default('edge', true) }}"
+          - "APP_IMAGE: {{ (bootstrap_env_dict.APP_IMAGE | default('') | length > 0) | ternary('set', 'unset') }}"
+          - "ZEROTIER_NETWORK_ID: {{ (bootstrap_env_dict.ZEROTIER_NETWORK_ID | default('') | length > 0) | ternary('set', 'unset') }}"
+          - "CLOUDFLARE_TUNNEL_TOKEN: {{ (bootstrap_env_dict.CLOUDFLARE_TUNNEL_TOKEN | default('') | length > 0) | ternary('set', 'unset') }}"
+
+    - name: Validate required variables for profile
+      ansible.builtin.assert:
+        that:
+          - "(bootstrap_env_dict[item] | default(lookup('env', item) | default('', true), true)) | length > 0"
+        fail_msg: "Required variable {{ item }} is missing for profile {{ profile }}."
+      loop: "{{ required_vars_by_profile[profile] | default([]) }}"
+
+    - name: Apply profile roles
+      ansible.builtin.include_role:
+        name: "{{ item }}"
+      loop: "{{ profile_roles }}"

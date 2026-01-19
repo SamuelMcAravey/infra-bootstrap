@@ -1,0 +1,4 @@
+---
+- name: Placeholder
+  ansible.builtin.debug:
+    msg: "Role docker-host not implemented yet."

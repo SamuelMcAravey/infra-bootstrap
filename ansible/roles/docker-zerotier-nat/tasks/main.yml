@@ -1,0 +1,4 @@
+---
+- name: Placeholder
+  ansible.builtin.debug:
+    msg: "Role docker-zerotier-nat not implemented yet."

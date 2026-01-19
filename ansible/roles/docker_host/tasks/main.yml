@@ -1,0 +1,84 @@
+---
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Ensure keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /tmp/docker.gpg
+    mode: "0644"
+
+- name: Install Docker GPG keyring
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: Set docker repo arch
+  ansible.builtin.command:
+    cmd: dpkg --print-architecture
+  register: docker_arch
+  changed_when: false
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ docker_arch.stdout }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian {{ ansible_lsb.codename | default(ansible_distribution_release) }} stable"
+    state: present
+    filename: docker
+
+- name: Install Docker Engine and plugins
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Enable and start Docker service
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: Check for samuel user
+  ansible.builtin.getent:
+    database: passwd
+    key: samuel
+  register: samuel_passwd
+  failed_when: false
+
+- name: Add samuel to docker group
+  ansible.builtin.user:
+    name: samuel
+    groups: docker
+    append: true
+  when: samuel_passwd is defined and samuel_passwd.ansible_facts is defined and samuel_passwd.ansible_facts.getent_passwd is defined and samuel_passwd.ansible_facts.getent_passwd.samuel is defined
+
+- name: Verify Docker is functional
+  ansible.builtin.command:
+    cmd: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Log Docker version
+  ansible.builtin.debug:
+    msg: "{{ docker_version.stdout }}"

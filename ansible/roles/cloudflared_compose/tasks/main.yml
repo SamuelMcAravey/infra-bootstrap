@@ -1,0 +1,61 @@
+---
+- name: Resolve cloudflared token
+  ansible.builtin.set_fact:
+    cloudflared_tunnel_token: >-
+      {{
+        cloudflare_tunnel_token
+        | default(bootstrap_env_dict.CLOUDFLARE_TUNNEL_TOKEN | default(lookup('env', 'CLOUDFLARE_TUNNEL_TOKEN') | default('', true), true), true)
+      }}
+  no_log: true
+
+- name: Fail when CLOUDFLARE_TUNNEL_TOKEN is missing
+  ansible.builtin.fail:
+    msg: "CLOUDFLARE_TUNNEL_TOKEN is required for cloudflared compose."
+  when: cloudflared_tunnel_token | length == 0
+
+- name: Resolve edge network name
+  ansible.builtin.set_fact:
+    edge_network_name_effective: >-
+      {{
+        edge_network_name
+        | default(bootstrap_env_dict.EDGE_NETWORK_NAME | default(lookup('env', 'EDGE_NETWORK_NAME') | default('edge', true), true), true)
+      }}
+
+- name: Ensure cloudflared compose directory
+  ansible.builtin.file:
+    path: /opt/cloudflared
+    state: directory
+    mode: "0755"
+
+- name: Write cloudflared compose file
+  ansible.builtin.copy:
+    dest: /opt/cloudflared/docker-compose.cloudflared.yml
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      version: "3.8"
+
+      services:
+        cloudflared:
+          image: cloudflare/cloudflared:latest
+          command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+          environment:
+            TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+          networks:
+            - edge
+
+      networks:
+        edge:
+          external: true
+          name: {{ edge_network_name_effective }}
+
+- name: Write cloudflared env file
+  ansible.builtin.copy:
+    dest: /opt/cloudflared/.env
+    mode: "0600"
+    owner: root
+    group: root
+    content: |
+      CLOUDFLARE_TUNNEL_TOKEN={{ cloudflared_tunnel_token }}
+  no_log: true

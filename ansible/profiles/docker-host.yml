@@ -1,0 +1,5 @@
+---
+- name: Set profile roles
+  ansible.builtin.set_fact:
+    profile_roles:
+      - docker_host

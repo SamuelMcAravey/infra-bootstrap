@@ -1,0 +1,104 @@
+---
+- name: Resolve ZeroTier network id
+  ansible.builtin.set_fact:
+    zerotier_network_id_effective: >-
+      {{
+        zerotier_network_id
+        | default(bootstrap_env_dict.ZEROTIER_NETWORK_ID | default(lookup('env', 'ZEROTIER_NETWORK_ID') | default('', true), true), true)
+      }}
+
+- name: Install ZeroTier prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Ensure keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download ZeroTier GPG key
+  ansible.builtin.get_url:
+    url: https://download.zerotier.com/contact@zerotier.com.gpg
+    dest: /tmp/zerotier.gpg
+    mode: "0644"
+
+- name: Install ZeroTier GPG keyring
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /etc/apt/keyrings/zerotier.gpg /tmp/zerotier.gpg
+    creates: /etc/apt/keyrings/zerotier.gpg
+
+- name: Add ZeroTier apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/zerotier.gpg] https://download.zerotier.com/debian/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main"
+    state: present
+    filename: zerotier
+
+- name: Install zerotier-one
+  ansible.builtin.apt:
+    name: zerotier-one
+    state: present
+    update_cache: true
+
+- name: Enable and start zerotier-one
+  ansible.builtin.service:
+    name: zerotier-one
+    state: started
+    enabled: true
+
+- name: Validate /dev/net/tun exists
+  ansible.builtin.stat:
+    path: /dev/net/tun
+  register: zerotier_tun
+
+- name: Fail if /dev/net/tun is missing
+  ansible.builtin.fail:
+    msg: |-
+      /dev/net/tun is missing. ZeroTier requires the TUN device.
+      Proxmox LXC config lines:
+        lxc.cgroup2.devices.allow: c 10:200 rwm
+        lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+  when: not zerotier_tun.stat.exists
+
+- name: List joined ZeroTier networks
+  ansible.builtin.command:
+    cmd: zerotier-cli listnetworks
+  register: zerotier_networks
+  changed_when: false
+
+- name: Join ZeroTier network if not joined
+  ansible.builtin.command:
+    cmd: "zerotier-cli join {{ zerotier_network_id_effective }}"
+  when:
+    - zerotier_network_id_effective | length > 0
+    - zerotier_networks.stdout is not search(zerotier_network_id_effective)
+
+- name: Wait for ZeroTier interface
+  ansible.builtin.command:
+    cmd: ip -o link show
+  register: zerotier_links
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: zerotier_links.stdout is search('^\\d+: zt', multiline=True)
+
+- name: Detect ZeroTier interface name
+  ansible.builtin.set_fact:
+    zerotier_interface: "{{ zerotier_links.stdout | regex_search('^\\d+: (zt[^:]+):', '\\1', multiline=True) }}"
+
+- name: ZeroTier status
+  ansible.builtin.command:
+    cmd: zerotier-cli status
+  register: zerotier_status
+  changed_when: false
+
+- name: Log ZeroTier interface and status
+  ansible.builtin.debug:
+    msg:
+      - "ZeroTier interface: {{ zerotier_interface | default('unknown') }}"
+      - "ZeroTier status: {{ zerotier_status.stdout }}"

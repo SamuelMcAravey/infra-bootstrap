@@ -1,0 +1,23 @@
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.swp
+*.bak
+*.orig
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor settings
+.vscode/
+.idea/
+
+# Runtime artifacts
+*.pid
+*.pid.lock
+
+# Cloud-init run artifacts
+cloud-init/instance/

@@ -1,0 +1,11 @@
+---
+profile: edgeapp
+repo_url: ""
+zerotier_network_id: ""
+cloudflare_tunnel_token: ""
+app_image: ""
+app_port: ""
+app_port_publish: ""
+app_container_name: pw_app1
+compose_project_dir: /srv/app
+edge_network_name: edge

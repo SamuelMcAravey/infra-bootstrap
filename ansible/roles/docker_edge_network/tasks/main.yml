@@ -1,0 +1,20 @@
+---
+- name: Resolve edge network name
+  ansible.builtin.set_fact:
+    edge_network_name_effective: >-
+      {{
+        edge_network_name
+        | default(bootstrap_env_dict.EDGE_NETWORK_NAME | default(lookup('env', 'EDGE_NETWORK_NAME') | default('edge', true), true), true)
+      }}
+
+- name: Inspect docker network
+  ansible.builtin.command:
+    cmd: "docker network inspect {{ edge_network_name_effective }}"
+  register: edge_network_inspect
+  changed_when: false
+  failed_when: false
+
+- name: Create docker network
+  ansible.builtin.command:
+    cmd: "docker network create {{ edge_network_name_effective }}"
+  when: edge_network_inspect.rc != 0

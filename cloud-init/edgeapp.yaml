@@ -1,0 +1,42 @@
+#cloud-config
+# Proxmox/NoCloud cloud-init user-data for this repo.
+# Intended for Proxmox snippets (`qm set ... --cicustom "user=local:snippets/<file>"`) or NoCloud seed ISO.
+# Proxmox is expected to manage networking/hostname/SSH keys; this user-data only bootstraps provisioning.
+# Profile: edgeapp
+
+output:
+  all: '| tee -a /var/log/cloud-init-output.log'
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - python3
+  - python3-apt
+  - git
+  - ca-certificates
+  - curl
+
+write_files:
+  - path: /etc/bootstrap.env
+    owner: root:root
+    permissions: '0644'
+    content: |
+      # Bootstrap configuration consumed by scripts/bootstrap.sh and Ansible.
+      PROFILE=edgeapp
+      # REPO_URL=https://example.com/your-org/infra-bootstrap.git
+      REPO_URL=
+
+      # Used by app profiles (app_compose role).
+      COMPOSE_PROJECT_DIR=/srv/app
+
+      # Docker edge network used by the cloudflared/app stack.
+      EDGE_NETWORK_NAME=edge
+
+      # Optional/required depending on the selected Ansible profile.
+      ZEROTIER_NETWORK_ID=
+      CLOUDFLARE_TUNNEL_TOKEN=
+      APP_IMAGE=
+
+runcmd:
+  - [ bash, -lc, 'set -euo pipefail; source /etc/bootstrap.env; : "${REPO_URL:?REPO_URL must be set}"; mkdir -p /opt/bootstrap; if [ ! -d /opt/bootstrap/repo/.git ]; then git clone "${REPO_URL}" /opt/bootstrap/repo; else git -C /opt/bootstrap/repo pull --ff-only; fi; /opt/bootstrap/repo/scripts/bootstrap.sh' ]

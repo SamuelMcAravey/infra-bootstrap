@@ -1,0 +1,9 @@
+---
+- name: Set profile roles
+  ansible.builtin.set_fact:
+    profile_roles:
+      - docker_host
+      - zerotier
+      - docker_zerotier_nat
+      - docker_edge_network
+      - app_compose

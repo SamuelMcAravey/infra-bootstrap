@@ -32,6 +32,7 @@ Notes:
   - Sets cicustom to: user=<snippets-storage-id>:snippets/ci-<profile>.yaml
   - If a version file exists at: <snippets-storage-id>:snippets/ci-<profile>.version,
     the VM description is updated to include the profile + ref.
+  - If the cloned VM already has a cloud-init drive attached, the script will keep it. Otherwise it will add one.
 EOF
 }
 
@@ -176,7 +177,20 @@ main() {
   qm set "$vmid" --cores "$cores" --memory "$memory"
   qm set "$vmid" --net0 "virtio,bridge=${bridge}"
   qm set "$vmid" --agent enabled=1
-  qm set "$vmid" --ide2 "${storage}:cloudinit"
+
+  local cfg
+  cfg="$(qm config "$vmid" 2>/dev/null || true)"
+  if echo "$cfg" | grep -qE '^ide2:\s+'; then
+    echo "Cloud-init drive already present on ide2; leaving as-is"
+  else
+    local existing_ci_vol="${storage}:vm-${vmid}-cloudinit"
+    if pvesm path "$existing_ci_vol" >/dev/null 2>&1; then
+      echo "Found existing cloud-init volume (${existing_ci_vol}); attaching on ide2"
+      qm set "$vmid" --ide2 "${existing_ci_vol},media=cdrom"
+    else
+      qm set "$vmid" --ide2 "${storage}:cloudinit"
+    fi
+  fi
 
   echo "Attaching profile snippet (profile=$profile)"
   qm set "$vmid" --cicustom "user=${ci_volume_id}"

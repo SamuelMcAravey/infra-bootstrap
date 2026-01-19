@@ -61,3 +61,10 @@ Start by selecting a profile and apply it via the matching cloud-init user-data.
 ```bash
 sudo bash -c "curl -fsSL https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap/refs/heads/main/scripts/install-pwsh.sh | bash"
 ```
+
+### Create VM in Proxmox with Profile
+
+```bash
+sudo env "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+  pwsh -NoProfile -Command "& ([ScriptBlock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap/refs/heads/main/scripts/New-InfraVm.ps1'))) -Profile edgeapp -VmId 1209 -Name edgeapp-09 -TemplateId 9002 -SnippetsStorageId synology.lan -SnippetsPath /mnt/pve/synology.lan/snippets -Bridge vmbr0 -Storage local-lvm -Vlan 10"
+```

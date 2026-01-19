@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install PowerShell on Debian-based systems (including Proxmox on Debian 13/Trixie)
-# using the "universal package" (.tar.gz) from official GitHub releases.
-#
-# Source: Microsoft docs recommend tar.gz binary archive installs on Linux. :contentReference[oaicite:1]{index=1}
-
 log() { printf '[%s] %s\n' "$(date -Is)" "$*"; }
 
 require_root() {
@@ -24,7 +19,6 @@ apt_install_prereqs() {
 }
 
 detect_arch() {
-  # Map Debian arch -> PowerShell release arch tokens
   local arch
   arch="$(dpkg --print-architecture)"
   case "$arch" in
@@ -39,12 +33,11 @@ detect_arch() {
 }
 
 get_latest_version() {
-  # Follow redirect from /releases/latest -> .../tag/vX.Y.Z
   local url tag
   url="$(curl -fsSL -o /dev/null -w '%{url_effective}' -L \
     https://github.com/PowerShell/PowerShell/releases/latest)"
-  tag="${url##*/}"          # v7.5.4
-  tag="${tag#v}"            # 7.5.4
+  tag="${url##*/}"   # v7.5.4
+  tag="${tag#v}"     # 7.5.4
   if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     log "ERROR: Could not determine latest PowerShell version from GitHub."
     exit 2
@@ -80,9 +73,33 @@ verify_hash_if_available() {
   fi
 }
 
+assert_exec_ok() {
+  local path="$1"
+
+  # Ensure executable bit is set
+  if [[ ! -x "$path" ]]; then
+    chmod 0755 "$path" || true
+  fi
+
+  if [[ ! -x "$path" ]]; then
+    log "ERROR: ${path} is not executable (permissions)."
+    ls -l "$path" || true
+    exit 2
+  fi
+
+  # Check for noexec mounts affecting this path
+  local mp opts
+  mp="$(df -P "$path" | awk 'NR==2{print $6}')"
+  opts="$(findmnt -no OPTIONS "$mp" 2>/dev/null || true)"
+  if [[ "$opts" == *noexec* ]]; then
+    log "ERROR: ${mp} is mounted with noexec (${opts})."
+    log "       Install path cannot execute binaries. Use /usr/local (default) or remount with exec."
+    exit 2
+  fi
+}
+
 install_pwsh_tarball() {
-  local ver="$1"
-  local ps_arch="$2"
+  local ver="$1" ps_arch="$2"
   local asset="powershell-${ver}-linux-${ps_arch}.tar.gz"
   local url="https://github.com/PowerShell/PowerShell/releases/download/v${ver}/${asset}"
 
@@ -91,7 +108,8 @@ install_pwsh_tarball() {
   tgz="${tmp}/${asset}"
   extract_dir="${tmp}/extract"
 
-  install_root="/opt/microsoft/powershell"
+  # Changed from /opt to /usr/local to avoid /opt noexec on some systems.
+  install_root="/usr/local/powershell"
   install_dir="${install_root}/7"
   symlink="/usr/local/bin/pwsh"
 
@@ -107,13 +125,14 @@ install_pwsh_tarball() {
   log "Installing to ${install_dir}..."
   mkdir -p "$install_root"
 
-  # Atomic-ish install: move aside existing, then replace.
   if [[ -d "$install_dir" ]]; then
     rm -rf "${install_dir}.old" || true
     mv "$install_dir" "${install_dir}.old"
   fi
   mv "$extract_dir" "$install_dir"
-  chmod 0755 "$install_dir" || true
+
+  # Ensure pwsh is executable and not blocked by noexec.
+  assert_exec_ok "${install_dir}/pwsh"
 
   log "Linking ${symlink} -> ${install_dir}/pwsh"
   ln -sf "${install_dir}/pwsh" "$symlink"
@@ -144,39 +163,18 @@ main() {
   local version=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --version)
-        version="${2:-}"
-        shift 2
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        log "ERROR: Unknown argument: $1"
-        usage
-        exit 2
-        ;;
+      --version) version="${2:-}"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) log "ERROR: Unknown argument: $1"; usage; exit 2 ;;
     esac
   done
-
-  if ! need_cmd apt-get; then
-    log "ERROR: This script expects apt-get (Debian/Proxmox)."
-    exit 2
-  fi
 
   apt_install_prereqs
 
   local ps_arch ver
   ps_arch="$(detect_arch)"
+  ver="${version:-$(get_latest_version)}"
 
-  if [[ -n "$version" ]]; then
-    ver="$version"
-  else
-    ver="$(get_latest_version)"
-  fi
-
-  # If already installed, skip if same version
   if need_cmd pwsh; then
     local current
     current="$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)"

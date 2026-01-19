@@ -76,7 +76,7 @@ bash ./scripts/create-edgeapp.sh \
   --name <name> \
   --template-id <template-vmid> \
   --snippets-storage-id synology.lan \
-  --storage local-zfs \
+  --storage local-lvm \
   --bridge vmbr0
 ```
 

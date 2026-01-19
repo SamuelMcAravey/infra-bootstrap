@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STORAGE_DEFAULT="local-zfs"
+STORAGE_DEFAULT="local-lvm"
 BRIDGE_DEFAULT="vmbr0"
 CORES_DEFAULT="4"
 MEMORY_DEFAULT="8192"
@@ -21,7 +21,7 @@ Required:
   --snippets-storage-id <id>  Proxmox storage ID that provides snippets content (e.g. "shared-snippets")
 
 Optional:
-  --storage <id>              Target storage for the VM disks + cloudinit drive (default: local-zfs)
+  --storage <id>              Target storage for the VM disks + cloudinit drive (default: local-lvm)
   --bridge <bridge>           Network bridge for net0 (default: vmbr0)
   --cores <n>                 vCPU cores (default: 4)
   --memory <mb>               Memory in MB (default: 8192)

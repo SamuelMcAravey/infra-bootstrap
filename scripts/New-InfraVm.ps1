@@ -16,6 +16,7 @@ param(
   [int]$Cores = 4,
   [int]$MemoryMb = 8192,
   [string]$Bridge = 'vmbr0',
+  [int]$Vlan,
   [string]$Storage = 'local-zfs',
   [string]$SnippetsStorageId = 'synology.lan',
   [string]$SnippetsPath = '/mnt/pve/synology.lan/snippets',
@@ -263,7 +264,11 @@ Invoke-Qm @('clone', $TemplateId, $VmId, '--name', $Name, '--full', 'true')
 
 Write-Info "Configuring VM resources"
 Invoke-Qm @('set', $VmId, '--cores', $Cores, '--memory', $MemoryMb)
-Invoke-Qm @('set', $VmId, '--net0', "virtio,bridge=$Bridge")
+$net0 = "virtio,bridge=$Bridge"
+if ($Vlan -gt 0) {
+  $net0 = "$net0,tag=$Vlan"
+}
+Invoke-Qm @('set', $VmId, '--net0', $net0)
 Invoke-Qm @('set', $VmId, '--agent', 'enabled=1')
 
 $cfg = & qm config $VmId 2>$null
@@ -282,7 +287,11 @@ if ($cfg -match '^ide2:\s+') {
 
 Invoke-Qm @('set', $VmId, '--boot', 'order=scsi0;ide2')
 
-$cicustom = "$SnippetsStorageId:snippets/ci-$Profile-$VmId.yaml"
+if ([string]::IsNullOrWhiteSpace($SnippetsStorageId)) {
+  Die "SnippetsStorageId is empty; expected a Proxmox storage ID like 'local' or 'synology.lan'."
+}
+
+$cicustom = "${SnippetsStorageId}:snippets/ci-$Profile-$VmId.yaml"
 Invoke-Qm @('set', $VmId, '--cicustom', "user=$cicustom")
 
 Write-Info "Starting VM $VmId"

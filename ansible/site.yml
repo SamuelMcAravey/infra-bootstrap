@@ -51,6 +51,7 @@
         bootstrap_env_kv: >-
           {{
             (bootstrap_env_lines | default([]))
+            | select('match', '^\\s*(?:export\\s+)?[A-Za-z_][A-Za-z0-9_]*\\s*=')
             | map(
                 'regex_search',
                 '^\\s*(?:export\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*)\\s*$',

@@ -52,3 +52,12 @@ Profiles describe a target system flavor (for example `edgeapp`, `docker-host`, 
 Each profile wires together Ansible roles from this repo to keep provisioning repeatable.
 
 Start by selecting a profile and apply it via the matching cloud-init user-data.
+
+
+## Commands:
+
+### Install Powershell on Debian/Ubuntu
+
+```bash
+sudo bash -c "curl -fsSL https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap/refs/heads/main/scripts/install-pwsh.sh | bash"
+```

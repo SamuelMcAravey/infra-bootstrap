@@ -127,11 +127,11 @@ function Ensure-SnippetsPath {
 }
 
 function Invoke-Qm {
-  param([string[]]$Args)
-  Write-Info ("qm " + ($Args -join ' '))
-  & qm @Args
+  param([string[]]$QmArgs)
+  Write-Info ("qm " + ($QmArgs -join ' '))
+  & qm @QmArgs
   if ($LASTEXITCODE -ne 0) {
-    Die "qm failed: qm $($Args -join ' ')"
+    Die "qm failed: qm $($QmArgs -join ' ')"
   }
 }
 

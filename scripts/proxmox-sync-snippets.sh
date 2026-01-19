@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SNIPPETS_DIR_DEFAULT="/mnt/pve/shared-snippets"
+SNIPPETS_DIR_DEFAULT="${SNIPPETS_DIR:-}"
+if [[ -z "$SNIPPETS_DIR_DEFAULT" && -n "${SNIPPETS_STORAGE_ID:-}" ]]; then
+  SNIPPETS_DIR_DEFAULT="/mnt/pve/${SNIPPETS_STORAGE_ID}/snippets"
+fi
 REF_DEFAULT="main"
 
 usage() {
@@ -11,7 +14,7 @@ Usage: proxmox-sync-snippets.sh [options]
 Fetches cloud-init profile YAML files from GitHub raw and writes them to a Proxmox snippets directory.
 
 Options:
-  --snippets-dir <dir>   Root directory containing cloud-init/ and meta/ (default: /mnt/pve/shared-snippets)
+  --snippets-dir <dir>   Proxmox snippets directory (flat) (default: $SNIPPETS_DIR or /mnt/pve/$SNIPPETS_STORAGE_ID/snippets)
   --ref <ref>            Git ref/branch/tag/sha to fetch (default: main)
   --profiles <list>      Comma-separated profile names (default: all found in repo cloud-init/*.yaml)
 
@@ -146,7 +149,7 @@ main() {
     esac
   done
 
-  [[ -n "$snippets_dir" ]] || die "--snippets-dir is required"
+  [[ -n "$snippets_dir" ]] || die "--snippets-dir is required (or set SNIPPETS_DIR)"
   [[ -n "$ref" ]] || die "--ref is required"
 
   local repo_root
@@ -172,11 +175,8 @@ main() {
   if [[ -f "$ensure_script" ]]; then
     bash "$ensure_script" --snippets-dir "$snippets_dir" >/dev/null
   else
-    mkdir -p "$snippets_dir/cloud-init" "$snippets_dir/meta"
+    mkdir -p "$snippets_dir"
   fi
-
-  local ci_out_dir="$snippets_dir/cloud-init"
-  local meta_out_dir="$snippets_dir/meta"
 
   local updated=0
   local unchanged=0
@@ -210,7 +210,7 @@ main() {
       continue
     fi
 
-    local dest="$ci_out_dir/${profile}.yaml"
+    local dest="$snippets_dir/ci-${profile}.yaml"
     local changed="yes"
     if [[ -f "$dest" ]] && cmp -s "$tmp" "$dest"; then
       changed="no"
@@ -230,7 +230,7 @@ main() {
 
     local ts
     ts="$(date -Is)"
-    cat >"$meta_out_dir/${profile}.version" <<EOF
+    cat >"$snippets_dir/ci-${profile}.version" <<EOF
 ref=$ref
 timestamp=$ts
 url=$url

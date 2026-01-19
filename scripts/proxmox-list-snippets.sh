@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SNIPPETS_DIR_DEFAULT="/mnt/pve/shared-snippets"
+SNIPPETS_DIR_DEFAULT="${SNIPPETS_DIR:-}"
+if [[ -z "$SNIPPETS_DIR_DEFAULT" && -n "${SNIPPETS_STORAGE_ID:-}" ]]; then
+  SNIPPETS_DIR_DEFAULT="/mnt/pve/${SNIPPETS_STORAGE_ID}/snippets"
+fi
 
 usage() {
   cat <<'EOF'
 Usage: proxmox-list-snippets.sh [--snippets-dir <dir>]
 
 Lists cloud-init profiles available under:
-  <snippets-dir>/cloud-init/*.yaml
+  <snippets-dir>/ci-*.yaml
 
 Also shows the recorded version metadata if present:
-  <snippets-dir>/meta/<profile>.version
+  <snippets-dir>/ci-<profile>.version
 
 Defaults:
-  --snippets-dir /mnt/pve/shared-snippets
+  --snippets-dir $SNIPPETS_DIR (or /mnt/pve/$SNIPPETS_STORAGE_ID/snippets)
 EOF
 }
 
@@ -60,8 +63,7 @@ main() {
     esac
   done
 
-  local ci_dir="$snippets_dir/cloud-init"
-  local meta_dir="$snippets_dir/meta"
+  local ci_dir="$snippets_dir"
 
   if [[ ! -d "$ci_dir" ]]; then
     echo "No cloud-init snippets found: $ci_dir does not exist"
@@ -69,7 +71,7 @@ main() {
   fi
 
   shopt -s nullglob
-  local files=("$ci_dir"/*.yaml)
+  local files=("$ci_dir"/ci-*.yaml)
   shopt -u nullglob
 
   if ((${#files[@]} == 0)); then
@@ -84,7 +86,8 @@ main() {
   for file in "${files[@]}"; do
     local profile
     profile="$(basename "$file" .yaml)"
-    local version_path="$meta_dir/$profile.version"
+    profile="${profile#ci-}"
+    local version_path="$snippets_dir/ci-$profile.version"
 
     printf "%-24s  %-60s  %s\n" \
       "$profile" \
@@ -94,4 +97,3 @@ main() {
 }
 
 main "$@"
-

@@ -53,7 +53,7 @@ Ensure the snippets subfolders exist:
 bash ./scripts/proxmox-ensure-storage.sh --snippets-dir "$SNIPPETS_DIR"
 ```
 
-Sync cloud-init profile YAMLs into the snippets storage:
+Sync cloud-init profile YAMLs into the snippets storage (flat `ci-*.yaml` in the snippets root):
 
 ```bash
 REPO_RAW_BASE=https://raw.githubusercontent.com/SamuelMcAravey/infra-bootstrap
@@ -118,4 +118,3 @@ Re-run:
 ```bash
 sudo /opt/bootstrap/repo/scripts/bootstrap.sh
 ```
-

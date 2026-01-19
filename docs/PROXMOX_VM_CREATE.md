@@ -8,7 +8,7 @@ profile-specific `cloud-init/*.yaml` snippet.
 - Your template VM has cloud-init enabled (and is marked as a template).
 - Your target storage supports `cloudinit` volumes (for the `ide2: <storage>:cloudinit` drive).
 - Your snippets storage ID exists in Proxmox and has `Snippets` enabled (see `docs/PROXMOX_SNIPPETS.md`).
-- The `cloud-init/<profile>.yaml` snippet has been synced into the snippets storage.
+- The profile snippet has been synced into the snippets storage as `ci-<profile>.yaml` (flat in the snippets root).
 
 ## Generic Script
 
@@ -24,7 +24,7 @@ bash ./scripts/proxmox-create-vm.sh \
 ```
 
 If you used `scripts/proxmox-sync-snippets.sh`, the VM description will include the profile + ref when a version
-file exists at `snippets/meta/<profile>.version`.
+file exists at `ci-<profile>.version`.
 
 ## Profile Wrappers
 
@@ -42,4 +42,3 @@ On the VM, check:
 
 - `/var/log/cloud-init.log`
 - `/var/log/cloud-init-output.log`
-

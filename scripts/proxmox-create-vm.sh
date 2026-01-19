@@ -17,7 +17,7 @@ Required:
   --vmid <id>                 Target VMID to create
   --name <name>               VM name
   --template-id <id>          VMID of the template to clone
-  --profile <profile>         Cloud-init profile name (matches cloud-init/<profile>.yaml)
+  --profile <profile>         Cloud-init profile name (matches repo cloud-init/<profile>.yaml)
   --snippets-storage-id <id>  Proxmox storage ID that provides snippets content (e.g. "shared-snippets")
 
 Optional:
@@ -26,11 +26,11 @@ Optional:
   --cores <n>                 vCPU cores (default: 4)
   --memory <mb>               Memory in MB (default: 8192)
   --disk-gb <n>               Resize primary disk to this size (best-effort)
-  --snippets-path <path>      Path under the snippets root (default: cloud-init/<profile>.yaml)
+  --snippets-path <name>      Snippet filename in snippets root (default: ci-<profile>.yaml)
 
 Notes:
-  - Sets cicustom to: user=synology.lan:snippets/<snippets-path>
-  - If a version file exists at: synology.lan:snippets/meta/<profile>.version,
+  - Sets cicustom to: user=<snippets-storage-id>:ci-<profile>.yaml
+  - If a version file exists at: <snippets-storage-id>:ci-<profile>.version,
     the VM description is updated to include the profile + ref.
 EOF
 }
@@ -56,8 +56,8 @@ normalize_snippets_path() {
   local p="$1"
   p="$(trim "$p")"
   p="${p#/}"
-  if [[ "$p" == snippets/* ]]; then
-    p="${p#snippets/}"
+  if [[ "$p" == */* ]]; then
+    die "--snippets-path must be a filename in the snippets root (no subdirectories): got '$p'"
   fi
   printf '%s' "$p"
 }
@@ -157,16 +157,16 @@ main() {
   fi
 
   if [[ -z "$snippets_path" ]]; then
-    snippets_path="cloud-init/${profile}.yaml"
+    snippets_path="ci-${profile}.yaml"
   fi
   snippets_path="$(normalize_snippets_path "$snippets_path")"
 
-  local ci_volume_id="${snippets_storage_id}:snippets/${snippets_path}"
+  local ci_volume_id="${snippets_storage_id}:${snippets_path}"
   local ci_abs_path=""
   if ci_abs_path="$(pvesm path "$ci_volume_id" 2>/dev/null)"; then
     [[ -f "$ci_abs_path" ]] || die "Cloud-init snippet not found at resolved path: $ci_abs_path"
   else
-    die "Unable to resolve snippet path via pvesm: $ci_volume_id (did you sync snippets and enable snippets content on that storage?)"
+    die "Unable to resolve snippet via pvesm: $ci_volume_id (expected file in /mnt/pve/<storage-id>/snippets/${snippets_path})"
   fi
 
   echo "Cloning template $template_id -> VM $vmid ($name)"
@@ -194,7 +194,7 @@ main() {
     fi
   fi
 
-  local version_volume_id="${snippets_storage_id}:snippets/meta/${profile}.version"
+  local version_volume_id="${snippets_storage_id}:ci-${profile}.version"
   local version_abs_path=""
   if version_abs_path="$(pvesm path "$version_volume_id" 2>/dev/null)"; then
     if [[ -f "$version_abs_path" ]]; then

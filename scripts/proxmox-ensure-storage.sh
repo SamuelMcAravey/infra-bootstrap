@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SNIPPETS_DIR_DEFAULT="/mnt/pve/shared-snippets"
+SNIPPETS_DIR_DEFAULT="${SNIPPETS_DIR:-}"
+if [[ -z "$SNIPPETS_DIR_DEFAULT" && -n "${SNIPPETS_STORAGE_ID:-}" ]]; then
+  SNIPPETS_DIR_DEFAULT="/mnt/pve/${SNIPPETS_STORAGE_ID}/snippets"
+fi
 
 usage() {
   cat <<'EOF'
 Usage: proxmox-ensure-storage.sh [--snippets-dir <dir>]
 
-Ensures a Proxmox snippets directory exists and contains:
-  <snippets-dir>/cloud-init/
-  <snippets-dir>/meta/
+Ensures a Proxmox snippets directory exists.
+
+Proxmox snippet files should be placed directly in the snippets directory (flat), for example:
+  <snippets-dir>/ci-edgeapp.yaml
+  <snippets-dir>/ci-edgeapp.version
 
 Defaults:
-  --snippets-dir /mnt/pve/shared-snippets
+  --snippets-dir $SNIPPETS_DIR (or /mnt/pve/$SNIPPETS_STORAGE_ID/snippets)
 EOF
 }
 
@@ -42,13 +47,12 @@ main() {
   done
 
   if [[ -z "$snippets_dir" ]]; then
-    echo "ERROR: --snippets-dir is required." >&2
+    echo "ERROR: --snippets-dir is required (or set SNIPPETS_DIR)." >&2
     exit 2
   fi
 
-  mkdir -p "$snippets_dir/cloud-init" "$snippets_dir/meta"
-  echo "OK: ensured $snippets_dir/{cloud-init,meta}"
+  mkdir -p "$snippets_dir"
+  echo "OK: ensured $snippets_dir"
 }
 
 main "$@"
-

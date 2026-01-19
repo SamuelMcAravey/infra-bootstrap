@@ -32,14 +32,15 @@ On-disk, snippet files live under the storage's snippets directory:
 - Local storage example: `/var/lib/vz/snippets/`
 - Shared storage example: `/mnt/pve/synology.lan/snippets/`
 
-The scripts in `scripts/` accept `--snippets-dir` which should point at that **snippets directory**.
+Proxmox expects snippets to be **flat** in that directory (avoid nested subfolders).
+The sync script writes `ci-*.yaml` directly into `--snippets-dir`.
 
 ## Sync Cloud-Init Profiles Into Snippets
 
 This repo includes helper scripts intended to run on a Proxmox host:
 
-- `scripts/proxmox-ensure-storage.sh`: create `cloud-init/` and `meta/` subfolders under `--snippets-dir`
-- `scripts/proxmox-sync-snippets.sh`: download profile YAML files from GitHub raw into `--snippets-dir/cloud-init/`
+- `scripts/proxmox-ensure-storage.sh`: ensure `--snippets-dir` exists
+- `scripts/proxmox-sync-snippets.sh`: download profile YAML files from GitHub raw into `--snippets-dir` as `ci-<profile>.yaml`
 - `scripts/proxmox-list-snippets.sh`: list what is installed and show recorded version info
 
 ### One-time setup
@@ -68,8 +69,8 @@ bash ./scripts/proxmox-sync-snippets.sh --snippets-dir "$SNIPPETS_DIR" --ref mai
 
 This writes:
 
-- `"$SNIPPETS_DIR/cloud-init/<profile>.yaml"`
-- `"$SNIPPETS_DIR/meta/<profile>.version"` (records `ref` + `timestamp` + `url`)
+- `"$SNIPPETS_DIR/ci-<profile>.yaml"`
+- `"$SNIPPETS_DIR/ci-<profile>.version"` (records `ref` + `timestamp` + `url`)
 
 To sync a subset of profiles:
 
@@ -88,9 +89,9 @@ bash ./scripts/proxmox-list-snippets.sh --snippets-dir "$SNIPPETS_DIR"
 Once the YAML is present in the snippets directory, attach it to a VM (example):
 
 ```bash
-qm set <vmid> --cicustom "user=synology.lan:snippets/cloud-init/edgeapp.yaml"
+qm set <vmid> --cicustom "user=synology.lan:ci-edgeapp.yaml"
 ```
 
-The path after `snippets/` should match what was written by the sync script.
+The snippet filename should match what was written by the sync script.
 
 For a repeatable VM creation flow (clone template + attach profile snippet + start VM), see `docs/PROXMOX_VM_CREATE.md`.

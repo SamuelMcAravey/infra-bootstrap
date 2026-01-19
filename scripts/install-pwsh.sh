@@ -33,9 +33,7 @@ detect_debian_like() {
 # Proxmox can be "Debian-like" but may not have VERSION_CODENAME the way you expect.
 # Prefer Debian codename mapping from /etc/debian_version when needed.
 get_debian_codename() {
-  # If VERSION_CODENAME exists, use it.
   if [[ -f /etc/os-release ]]; then
-    # shellcheck disable=SC1091
     . /etc/os-release
     if [[ -n "${VERSION_CODENAME:-}" ]]; then
       echo "$VERSION_CODENAME"
@@ -43,60 +41,60 @@ get_debian_codename() {
     fi
   fi
 
-  # Fallback mapping from major version.
   if [[ -f /etc/debian_version ]]; then
-    local dv major
-    dv="$(cut -d'.' -f1 < /etc/debian_version || true)"
-    major="${dv//[^0-9]/}"
+    local major
+    major="$(cut -d'.' -f1 < /etc/debian_version | tr -cd '0-9')"
     case "$major" in
+      13) echo "trixie" ;;
       12) echo "bookworm" ;;
       11) echo "bullseye" ;;
       10) echo "buster" ;;
-      9)  echo "stretch" ;;
-      *)  echo "bookworm" ;; # safe default for modern Proxmox
+      *)  echo "bookworm" ;;
     esac
     return 0
   fi
 
-  # Last-resort default
   echo "bookworm"
 }
 
 install_pwsh_debian() {
-  log "Installing PowerShell via Microsoft APT repo (Debian/Proxmox)."
+  log "Installing PowerShell via Microsoft repo (Debian/Proxmox)."
 
-  local arch codename keyring repo_file
-  arch="$(dpkg --print-architecture)"
-  codename="$(get_debian_codename)"
-
-  # Dependencies
   apt-get update -y
-  apt-get install -y --no-install-recommends \
-    ca-certificates curl gnupg
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg
 
-  # Keyring
+  local arch keyring repo_file os_codename ms_suite ms_path
+  arch="$(dpkg --print-architecture)"
+  os_codename="$(get_debian_codename)"
+
+  # Microsoft repo suite fallback:
+  # Debian 13 (trixie) isn't published yet in packages.microsoft.com for many products,
+  # so use Debian 12 (bookworm) repo metadata.
+  if [[ "$os_codename" == "trixie" ]]; then
+    ms_suite="bookworm"
+    ms_path="12"
+  else
+    ms_suite="$os_codename"
+    case "$os_codename" in
+      bookworm) ms_path="12" ;;
+      bullseye) ms_path="11" ;;
+      buster)   ms_path="10" ;;
+      *)        ms_path="12" ;;
+    esac
+  fi
+
   keyring="/etc/apt/keyrings/microsoft.gpg"
   install -d -m 0755 /etc/apt/keyrings
-  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-    | gpg --dearmor -o "$keyring"
+  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o "$keyring"
   chmod 0644 "$keyring"
 
-  # Repo
-  # Use the generic Debian "prod" repo; it's the most reliable for PowerShell on Debian-family.
-  # We still include codename in the "suite" field so apt resolves correctly.
   repo_file="/etc/apt/sources.list.d/microsoft-prod.list"
   cat >"$repo_file" <<EOF
-deb [arch=${arch} signed-by=${keyring}] https://packages.microsoft.com/repos/microsoft-debian-prod ${codename} main
+deb [arch=${arch} signed-by=${keyring}] https://packages.microsoft.com/debian/${ms_path}/prod ${ms_suite} main
 EOF
 
   apt-get update -y
   apt-get install -y powershell
-
-  # Verify
-  if ! command -v pwsh >/dev/null 2>&1; then
-    log "ERROR: pwsh not found after install."
-    return 1
-  fi
 }
 
 main() {

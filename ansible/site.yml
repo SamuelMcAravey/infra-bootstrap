@@ -45,9 +45,12 @@
             | reject('match', '^\\s*$')
             | list
           }}
+
+    - name: Parse bootstrap env key-value pairs
+      ansible.builtin.set_fact:
         bootstrap_env_kv: >-
           {{
-            bootstrap_env_lines
+            (bootstrap_env_lines | default([]))
             | map(
                 'regex_search',
                 '^\\s*(?:export\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*)\\s*$',
@@ -56,9 +59,12 @@
             | reject('equalto', None)
             | list
           }}
+
+    - name: Build bootstrap env dict
+      ansible.builtin.set_fact:
         bootstrap_env_dict: >-
           {{
-            dict(bootstrap_env_kv | map('split', '\x1f', 2) | map('list'))
+            dict((bootstrap_env_kv | default([])) | map('split', '\x1f', 2) | map('list'))
           }}
 
     - name: Determine active profile

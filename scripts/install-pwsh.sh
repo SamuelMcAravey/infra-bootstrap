@@ -1,119 +1,193 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Installs PowerShell (pwsh) on Debian-based Proxmox hosts.
-# Tested approach: Microsoft "debian/prod" repo + keyring in /etc/apt/keyrings.
+# Install PowerShell on Debian-based systems (including Proxmox on Debian 13/Trixie)
+# using the "universal package" (.tar.gz) from official GitHub releases.
+#
+# Source: Microsoft docs recommend tar.gz binary archive installs on Linux. :contentReference[oaicite:1]{index=1}
 
-log() {
-  printf '[%s] %s\n' "$(date -Is)" "$*"
-}
+log() { printf '[%s] %s\n' "$(date -Is)" "$*"; }
 
 require_root() {
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-    log "ERROR: This script must be run as root (use sudo)."
+    log "ERROR: Run as root (sudo)."
     exit 2
   fi
 }
 
-detect_debian_like() {
-  if [[ -f /etc/os-release ]]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-    if [[ "${ID:-}" == "debian" || "${ID_LIKE:-}" == *debian* ]]; then
-      return 0
-    fi
-    # Proxmox often reports ID=debian but let's be explicit anyway.
-    if [[ "${ID:-}" == "proxmox" || "${NAME:-}" == *Proxmox* ]]; then
-      return 0
-    fi
-  fi
-  return 1
-}
+need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-# Proxmox can be "Debian-like" but may not have VERSION_CODENAME the way you expect.
-# Prefer Debian codename mapping from /etc/debian_version when needed.
-get_debian_codename() {
-  if [[ -f /etc/os-release ]]; then
-    . /etc/os-release
-    if [[ -n "${VERSION_CODENAME:-}" ]]; then
-      echo "$VERSION_CODENAME"
-      return 0
-    fi
-  fi
-
-  if [[ -f /etc/debian_version ]]; then
-    local major
-    major="$(cut -d'.' -f1 < /etc/debian_version | tr -cd '0-9')"
-    case "$major" in
-      13) echo "trixie" ;;
-      12) echo "bookworm" ;;
-      11) echo "bullseye" ;;
-      10) echo "buster" ;;
-      *)  echo "bookworm" ;;
-    esac
-    return 0
-  fi
-
-  echo "bookworm"
-}
-
-install_pwsh_debian() {
-  log "Installing PowerShell via Microsoft repo (Debian/Proxmox)."
-
+apt_install_prereqs() {
+  log "Installing prerequisites (curl, ca-certificates, tar, gzip)..."
   apt-get update -y
-  apt-get install -y --no-install-recommends ca-certificates curl gnupg
+  apt-get install -y --no-install-recommends ca-certificates curl tar gzip
+}
 
-  local arch keyring repo_file os_codename ms_suite ms_path
+detect_arch() {
+  # Map Debian arch -> PowerShell release arch tokens
+  local arch
   arch="$(dpkg --print-architecture)"
-  os_codename="$(get_debian_codename)"
+  case "$arch" in
+    amd64) echo "x64" ;;
+    arm64) echo "arm64" ;;
+    armhf) echo "arm32" ;;
+    *)
+      log "ERROR: Unsupported architecture: $arch"
+      exit 2
+      ;;
+  esac
+}
 
-  # Microsoft repo suite fallback:
-  # Debian 13 (trixie) isn't published yet in packages.microsoft.com for many products,
-  # so use Debian 12 (bookworm) repo metadata.
-  if [[ "$os_codename" == "trixie" ]]; then
-    ms_suite="bookworm"
-    ms_path="12"
+get_latest_version() {
+  # Follow redirect from /releases/latest -> .../tag/vX.Y.Z
+  local url tag
+  url="$(curl -fsSL -o /dev/null -w '%{url_effective}' -L \
+    https://github.com/PowerShell/PowerShell/releases/latest)"
+  tag="${url##*/}"          # v7.5.4
+  tag="${tag#v}"            # 7.5.4
+  if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    log "ERROR: Could not determine latest PowerShell version from GitHub."
+    exit 2
+  fi
+  echo "$tag"
+}
+
+verify_hash_if_available() {
+  local ver="$1" asset="$2" file="$3"
+  local hashes_url tmp_hashes expected actual
+
+  hashes_url="https://github.com/PowerShell/PowerShell/releases/download/v${ver}/hashes.sha256"
+  tmp_hashes="$(mktemp)"
+  if curl -fsSL -o "$tmp_hashes" "$hashes_url"; then
+    expected="$(grep -E "[[:space:]]\*?${asset}$" "$tmp_hashes" | awk '{print $1}' | head -n1 || true)"
+    if [[ -z "$expected" ]]; then
+      log "WARN: hashes.sha256 downloaded but no entry found for ${asset}. Skipping verification."
+      rm -f "$tmp_hashes"
+      return 0
+    fi
+    actual="$(sha256sum "$file" | awk '{print $1}')"
+    rm -f "$tmp_hashes"
+    if [[ "$actual" != "$expected" ]]; then
+      log "ERROR: SHA256 mismatch for ${asset}"
+      log "  expected: $expected"
+      log "  actual:   $actual"
+      exit 2
+    fi
+    log "SHA256 verified."
   else
-    ms_suite="$os_codename"
-    case "$os_codename" in
-      bookworm) ms_path="12" ;;
-      bullseye) ms_path="11" ;;
-      buster)   ms_path="10" ;;
-      *)        ms_path="12" ;;
-    esac
+    rm -f "$tmp_hashes"
+    log "WARN: hashes.sha256 not available for v${ver}. Skipping verification."
+  fi
+}
+
+install_pwsh_tarball() {
+  local ver="$1"
+  local ps_arch="$2"
+  local asset="powershell-${ver}-linux-${ps_arch}.tar.gz"
+  local url="https://github.com/PowerShell/PowerShell/releases/download/v${ver}/${asset}"
+
+  local tmp tgz extract_dir install_root install_dir symlink
+  tmp="$(mktemp -d)"
+  tgz="${tmp}/${asset}"
+  extract_dir="${tmp}/extract"
+
+  install_root="/opt/microsoft/powershell"
+  install_dir="${install_root}/7"
+  symlink="/usr/local/bin/pwsh"
+
+  log "Downloading PowerShell ${ver} (${ps_arch})..."
+  curl -fL -o "$tgz" "$url"
+
+  verify_hash_if_available "$ver" "$asset" "$tgz"
+
+  log "Extracting..."
+  mkdir -p "$extract_dir"
+  tar -xzf "$tgz" -C "$extract_dir"
+
+  log "Installing to ${install_dir}..."
+  mkdir -p "$install_root"
+
+  # Atomic-ish install: move aside existing, then replace.
+  if [[ -d "$install_dir" ]]; then
+    rm -rf "${install_dir}.old" || true
+    mv "$install_dir" "${install_dir}.old"
+  fi
+  mv "$extract_dir" "$install_dir"
+  chmod 0755 "$install_dir" || true
+
+  log "Linking ${symlink} -> ${install_dir}/pwsh"
+  ln -sf "${install_dir}/pwsh" "$symlink"
+
+  rm -rf "$tmp"
+
+  if ! need_cmd pwsh; then
+    log "ERROR: pwsh not found after install."
+    exit 2
   fi
 
-  keyring="/etc/apt/keyrings/microsoft.gpg"
-  install -d -m 0755 /etc/apt/keyrings
-  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o "$keyring"
-  chmod 0644 "$keyring"
+  log "Installed: $(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)"
+}
 
-  repo_file="/etc/apt/sources.list.d/microsoft-prod.list"
-  cat >"$repo_file" <<EOF
-deb [arch=${arch} signed-by=${keyring}] https://packages.microsoft.com/debian/${ms_path}/prod ${ms_suite} main
+usage() {
+  cat <<EOF
+Usage:
+  sudo ./install-pwsh-universal.sh [--version X.Y.Z]
+
+Options:
+  --version X.Y.Z   Install a specific version (default: latest stable)
 EOF
-
-  apt-get update -y
-  apt-get install -y powershell
 }
 
 main() {
   require_root
 
-  if command -v pwsh >/dev/null 2>&1; then
-    log "pwsh already installed: $(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)"
-    exit 0
-  fi
+  local version=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --version)
+        version="${2:-}"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        log "ERROR: Unknown argument: $1"
+        usage
+        exit 2
+        ;;
+    esac
+  done
 
-  if ! detect_debian_like; then
-    log "ERROR: Unsupported OS. This installer only supports Debian-based Proxmox."
+  if ! need_cmd apt-get; then
+    log "ERROR: This script expects apt-get (Debian/Proxmox)."
     exit 2
   fi
 
-  install_pwsh_debian
+  apt_install_prereqs
 
-  log "pwsh installed successfully."
-  pwsh -NoLogo -NoProfile -Command '$PSVersionTable | Format-List' || true
+  local ps_arch ver
+  ps_arch="$(detect_arch)"
+
+  if [[ -n "$version" ]]; then
+    ver="$version"
+  else
+    ver="$(get_latest_version)"
+  fi
+
+  # If already installed, skip if same version
+  if need_cmd pwsh; then
+    local current
+    current="$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)"
+    if [[ "$current" == "$ver" ]]; then
+      log "pwsh already installed at version ${current}. Nothing to do."
+      exit 0
+    fi
+    log "pwsh present (version: ${current}); will install ${ver}."
+  fi
+
+  install_pwsh_tarball "$ver" "$ps_arch"
 }
 
 main "$@"

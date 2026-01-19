@@ -29,8 +29,8 @@ Optional:
   --snippets-path <name>      Snippet filename in snippets root (default: ci-<profile>.yaml)
 
 Notes:
-  - Sets cicustom to: user=<snippets-storage-id>:ci-<profile>.yaml
-  - If a version file exists at: <snippets-storage-id>:ci-<profile>.version,
+  - Sets cicustom to: user=<snippets-storage-id>:snippets/ci-<profile>.yaml
+  - If a version file exists at: <snippets-storage-id>:snippets/ci-<profile>.version,
     the VM description is updated to include the profile + ref.
 EOF
 }
@@ -161,7 +161,7 @@ main() {
   fi
   snippets_path="$(normalize_snippets_path "$snippets_path")"
 
-  local ci_volume_id="${snippets_storage_id}:${snippets_path}"
+  local ci_volume_id="${snippets_storage_id}:snippets/${snippets_path}"
   local ci_abs_path=""
   if ci_abs_path="$(pvesm path "$ci_volume_id" 2>/dev/null)"; then
     [[ -f "$ci_abs_path" ]] || die "Cloud-init snippet not found at resolved path: $ci_abs_path"
@@ -194,7 +194,7 @@ main() {
     fi
   fi
 
-  local version_volume_id="${snippets_storage_id}:ci-${profile}.version"
+  local version_volume_id="${snippets_storage_id}:snippets/ci-${profile}.version"
   local version_abs_path=""
   if version_abs_path="$(pvesm path "$version_volume_id" 2>/dev/null)"; then
     if [[ -f "$version_abs_path" ]]; then

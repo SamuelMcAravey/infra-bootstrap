@@ -24,7 +24,7 @@ bash ./scripts/proxmox-create-vm.sh \
 ```
 
 If you used `scripts/proxmox-sync-snippets.sh`, the VM description will include the profile + ref when a version
-file exists at `ci-<profile>.version`.
+file exists at `snippets/ci-<profile>.version`.
 
 ## Profile Wrappers
 
